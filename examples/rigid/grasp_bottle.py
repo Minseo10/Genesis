@@ -26,7 +26,7 @@ def main():
         rigid_options=gs.options.RigidOptions(
             dt=0.01,
         ),
-        show_viewer=args.vis,
+        show_viewer=True,
     )
 
     ########################## entities ##########################
@@ -91,7 +91,7 @@ def main():
 
     # grasp
     franka.control_dofs_position(qpos[:-2], motors_dof)
-    franka.control_dofs_position(np.array([0, 0]), fingers_dof)  # you can use position control
+    franka.control_dofs_position(np.array([-0.5,-0.5]), fingers_dof)  # you can use position control
     for i in range(100):
         scene.step()
 
@@ -105,7 +105,6 @@ def main():
     franka.control_dofs_force(np.array([-20, -20]), fingers_dof)  # can also use force control
     for i in range(1000):
         scene.step()
-
 
 if __name__ == "__main__":
     main()

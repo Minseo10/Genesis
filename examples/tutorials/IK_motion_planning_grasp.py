@@ -98,5 +98,5 @@ qpos = franka.inverse_kinematics(
     quat=np.array([0, 1, 0, 0]),
 )
 franka.control_dofs_position(qpos[:-2], motors_dof)
-for i in range(200):
+for i in range(10000):
     scene.step()

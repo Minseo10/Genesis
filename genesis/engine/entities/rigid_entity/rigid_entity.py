@@ -1200,7 +1200,7 @@ class RigidEntity(Entity):
         self,
         qpos_goal,
         qpos_start=None,
-        timeout=5.0,
+        timeout=10.0,
         smooth_path=True,
         num_waypoints=100,
         ignore_collision=False,

@@ -26,7 +26,7 @@ def main():
             camera_fov=30,
             max_FPS=60,
         ),
-        show_viewer=args.vis,
+        show_viewer=True,
         vis_options=gs.options.VisOptions(
             visualize_mpm_boundary=True,
         ),

@@ -23,7 +23,7 @@ def main():
             camera_fov=40,
             max_FPS=200,
         ),
-        show_viewer=args.vis,
+        show_viewer=True,
         rigid_options=gs.options.RigidOptions(
             enable_joint_limit=False,
             enable_collision=False,
