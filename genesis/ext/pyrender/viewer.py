@@ -550,7 +550,7 @@ class Viewer(pyglet.window.Window):
             to save the video file.
         """
         if filename is None:
-            filename = self._get_save_filename(["mp4"])
+            filename = "/home/minseo/develop/Genesis/video_1.mp4"
 
         self.video_recorder.close()
         shutil.move(self.video_recorder.filename, filename)
