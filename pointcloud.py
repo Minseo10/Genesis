@@ -114,7 +114,7 @@ if __name__ == '__main__':
             camera_pos=(3.5, 0.0, 2.5),
             camera_lookat=(0.0, 0.0, 0.5),
             camera_fov=40,
-            max_FPS=60,
+            # max_FPS=200,
         ),
         vis_options=gs.options.VisOptions(
             show_world_frame=True,
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     point_cloud_system = RealTimePointCloud(camera_intrinsics)
 
     # Main simulation loop
-    rate = rospy.Rate(100)  # Match FPS with ROS rate
+    rate = rospy.Rate(1)  # Match FPS with ROS rate
 
     for i in range(10000):
         scene.step()

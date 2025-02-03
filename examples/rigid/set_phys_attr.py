@@ -26,7 +26,7 @@ def main():
         sim_options=gs.options.SimOptions(
             dt=0.01,
         ),
-        show_viewer=args.vis,
+        show_viewer=True,
         rigid_options=gs.options.RigidOptions(
             # NOTE: Batching dofs/links info to set different physical attributes across environments (in parallel)
             #       By default, both are False as it's faster and thus only turn this on if necessary

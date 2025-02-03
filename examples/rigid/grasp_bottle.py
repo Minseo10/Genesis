@@ -45,6 +45,7 @@ def main():
     )
     franka = scene.add_entity(
         gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"),
+        visualize_contact=True,
     )
 
     ########################## build ##########################
@@ -66,6 +67,11 @@ def main():
     )
 
     end_effector = franka.get_link("hand")
+
+    damping = bottle.get_dofs_damping()
+    stiffness = bottle.get_dofs_stiffness()
+    print("damping:", damping)
+    print("stiffness:", stiffness)
 
     # move to pre-grasp pose
     qpos = franka.inverse_kinematics(
@@ -102,7 +108,7 @@ def main():
         quat=np.array([0, 1, 0, 0]),
     )
     franka.control_dofs_position(qpos[:-2], motors_dof)
-    franka.control_dofs_force(np.array([-20, -20]), fingers_dof)  # can also use force control
+    franka.control_dofs_force(np.array([-2, -2]), fingers_dof)  # can also use force control
     for i in range(1000):
         scene.step()
 

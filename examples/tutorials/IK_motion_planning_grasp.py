@@ -51,6 +51,30 @@ franka.set_dofs_force_range(
 
 end_effector = franka.get_link("hand")
 
+# set physics parameter of the block
+damping = cube.get_dofs_damping()
+stiffness = cube.get_dofs_stiffness()
+inertia = cube.get_links_inertial_mass()
+invweight = cube.get_links_invweight()
+armature = cube.get_dofs_armature()
+print("damping: ", damping)
+print("stiffness: ", stiffness)
+print("inertia: ", inertia)
+print("invweight: ", invweight)
+print("armature: ", armature)
+
+# set physics parameter of the block
+damping = franka.get_dofs_damping()
+stiffness = franka.get_dofs_stiffness()
+inertia = franka.get_links_inertial_mass()
+invweight = franka.get_links_invweight()
+armature = franka.get_dofs_armature()
+print("damping: ", damping)
+print("stiffness: ", stiffness)
+print("inertia: ", inertia)
+print("invweight: ", invweight)
+print("armature: ", armature)
+
 # move to pre-grasp pose
 qpos = franka.inverse_kinematics(
     link=end_effector,

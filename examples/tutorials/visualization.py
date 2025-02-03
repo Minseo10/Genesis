@@ -51,11 +51,12 @@ scene.build()
 cam.start_recording()
 import numpy as np
 
-for i in range(240): # how long? 몇 초?
+for i in range(10000): # how long? 몇 초?
     scene.step()
     cam.set_pose(
         pos=(3.0 * np.sin(i / 60), 3.0 * np.cos(i / 60), 2.5),
         lookat=(0, 0, 0.5),
     )
-    cam.render(rgb=True, depth=True, segmentation=True, normal=True) # 이렇게 하면 depth 창에 영상처럼 나옴
+    rgb, depth, segmentation, normal = cam.render(rgb=True, depth=True, segmentation=True, normal=True) # 이렇게 하면 depth 창에 영상처럼 나옴
+
 # cam.stop_recording(save_to_filename="video.mp4", fps=60)
