@@ -1,5 +1,3 @@
-from mpmath import euler
-
 import genesis as gs
 import time
 import numpy as np
@@ -102,7 +100,7 @@ class DualArm:
                 merge_fixed_links=False,
             ),
             # vis_mode="collision",
-            visualize_contact=True,
+            # visualize_contact=True,
         )
 
         self.table = self.scene.add_entity(
@@ -149,8 +147,8 @@ class DualArm:
         # robot.control_dofs_force(np.array([2, 2, 2] * 3 + [-2, 2]), gripper_dofs)
 
         for i in range(100):
-            contacts_info = robot.get_contacts(with_entity=object)
-            print(contacts_info)
+            # contacts_info = robot.get_contacts(with_entity=object)
+            # print(contacts_info)
             self.scene.step()
             if self.ray_tracer:
                 self.cam_0.render()
@@ -235,9 +233,9 @@ class DualArm:
             qpos[arm_dofs] = qpos[arm_dofs]
 
             if holding:
-                path = robot.plan_path(qpos_goal=qpos, qpos_start=joint_angle, planner="RRTConnect", ignore_collision=True)
+                path = robot.plan_path(qpos_goal=qpos, planner="RRTConnect", ignore_collision=True)
             else:
-                path = robot.plan_path(qpos_goal=qpos, qpos_start=joint_angle, planner="RRTConnect")
+                path = robot.plan_path(qpos_goal=qpos, planner="RRTConnect")
 
             # if holding an object then use force to gripper
             for waypoint in path:
@@ -287,15 +285,33 @@ def main():
     # Initialize DualArm
     dual_arm = DualArm(ray_tracer)
 
-    block = dual_arm.scene.add_entity(
+
+    red = dual_arm.scene.add_entity(
         morph=gs.morphs.Box(
             size=(0.08, 0.08, 0.08),
-            pos=(-0.4, -0.5, 0.75),
+            pos=(-0.40, -0.525, 0.91),
+        ),
+        surface=gs.surfaces.Rough(
+            color=(0.6, 0.1, 0.1),
+        ),
+    )
+    green = dual_arm.scene.add_entity(
+        morph=gs.morphs.Box(
+            size=(0.08, 0.08, 0.08),
+            pos=(-0.40, -0.525, 0.83),
         ),
         surface=gs.surfaces.Rough(
             color=(0.1, 0.6, 0.1),
         ),
-        # material=gs.materials.Rigid(friction=0.1),
+    )
+    blue = dual_arm.scene.add_entity(
+        morph=gs.morphs.Box(
+            size=(0.08, 0.08, 0.08),
+            pos=(-0.40, -0.525, 0.75),
+        ),
+        surface=gs.surfaces.Rough(
+            color=(0.1, 0.1, 0.6),
+        ),
     )
 
     # bottle = dual_arm.scene.add_entity(
@@ -325,23 +341,23 @@ def main():
 
     time.sleep(5)
 
-    dual_arm.motion_planning(dual_arm.robot, init_qpos, block, pose=False)
+    dual_arm.motion_planning(dual_arm.robot, init_qpos, red, pose=False)
 
     # Pinch mode
     dual_arm.pinch_gripper(dual_arm.robot, True)
 
     # Move to pre-grasp pose
-    pre_grasp_pose = np.array([-0.4, -0.5, 0.81, 0.5, -0.5, 0.5, 0.5])
-    dual_arm.motion_planning(dual_arm.robot, pre_grasp_pose, block, left=True, holding=False, pose=True)
+    pre_grasp_pose = np.array([-0.4, -0.535, 0.97, 0.5, -0.5, 0.5, 0.5])
+    dual_arm.motion_planning(dual_arm.robot, pre_grasp_pose, red, left=True, holding=False, pose=True)
 
     # Move closer
     reach = pre_grasp_pose.copy()
     reach[2] -= 0.10
-    dual_arm.motion_planning(dual_arm.robot, reach, block, left=True, holding=False, pose=True)
+    dual_arm.motion_planning(dual_arm.robot, reach, red, left=True, holding=False, pose=True)
 
     # Grasp
     # dual_arm.control_gripper_contact(dual_arm.robot, left=True, pinch=True)
-    dual_arm.close_gripper(dual_arm.robot, block,True)
+    dual_arm.close_gripper(dual_arm.robot, red,True)
 
     time.sleep(10)
     # Lift
@@ -350,7 +366,7 @@ def main():
     lift[1] += 0.10
     lift[2] += 0.05
 
-    dual_arm.motion_planning(dual_arm.robot, lift, block, left=True, holding=True, pose=True)
+    dual_arm.motion_planning(dual_arm.robot, lift, red, left=True, holding=True, pose=True)
 
 
     for i in range(10000):

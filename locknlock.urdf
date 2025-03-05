@@ -1,0 +1,70 @@
+<?xml version="1.0" ?>
+<robot name="locknlock_container">
+    <!-- Base (Main Body) -->
+    <link name="base">
+        <visual>
+            <geometry>
+                <box size="0.2 0.15 0.1"/>
+            </geometry>
+            <material name="clear_plastic">
+                <color rgba="0.8 0.8 0.9 0.5"/>
+            </material>
+        </visual>
+    </link>
+
+    <!-- Lid (Detachable) -->
+    <link name="lid">
+        <visual>
+            <geometry>
+                <box size="0.21 0.16 0.02"/>
+            </geometry>
+            <material name="blue_lid">
+                <color rgba="0.2 0.2 0.6 1.0"/>
+            </material>
+        </visual>
+    </link>
+
+    <!-- Free-floating lid -->
+    <joint name="lid_joint" type="floating">
+        <parent link="base"/>
+        <child link="lid"/>
+    </joint>
+
+    <!-- Latches (Front and Back) -->
+    <link name="latch_front">
+        <visual>
+            <geometry>
+                <box size="0.05 0.02 0.015"/>
+            </geometry>
+            <material name="black_latch">
+                <color rgba="0.1 0.1 0.1 1.0"/>
+            </material>
+        </visual>
+    </link>
+
+    <link name="latch_back">
+        <visual>
+            <geometry>
+                <box size="0.05 0.02 0.015"/>
+            </geometry>
+            <material name="black_latch">
+                <color rgba="0.1 0.1 0.1 1.0"/>
+            </material>
+        </visual>
+    </link>
+
+    <!-- Hinges for Latches -->
+    <joint name="latch_front_joint" type="revolute">
+        <parent link="base"/>
+        <child link="latch_front"/>
+        <axis xyz="0 1 0"/>
+        <limit lower="0" upper="1.57" effort="1.0" velocity="1.0"/>
+    </joint>
+
+    <joint name="latch_back_joint" type="revolute">
+        <parent link="base"/>
+        <child link="latch_back"/>
+        <axis xyz="0 1 0"/>
+        <limit lower="0" upper="1.57" effort="1.0" velocity="1.0"/>
+    </joint>
+</robot>

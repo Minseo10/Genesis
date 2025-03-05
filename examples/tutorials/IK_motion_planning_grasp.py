@@ -22,6 +22,17 @@ scene = gs.Scene(
 plane = scene.add_entity(
     gs.morphs.Plane(),
 )
+locknlock = scene.add_entity(
+            morph=gs.morphs.URDF(
+                file='../../locknlock.urdf',
+                fixed=True,
+                # merge_fixed_links=False,
+                pos=(0.65, 0.2, 0.02)
+            ),
+            # vis_mode="collision",
+            # visualize_contact=True,
+        )
+
 cube = scene.add_entity(
     gs.morphs.Box(
         size=(0.04, 0.04, 0.04),
@@ -118,6 +129,7 @@ for i in range(100):
 qpos = franka.inverse_kinematics(
     link=end_effector,
     pos=np.array([0.65, 0.0, 0.28]),
+
     quat=np.array([0, 1, 0, 0]),
 )
 print(qpos)
