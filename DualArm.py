@@ -331,6 +331,9 @@ def main():
 
     # Set control gains
     dual_arm.set_control_gains(dual_arm.robot)
+    print("left ee current pose: ", dual_arm.robot.get_links_pos()[27], dual_arm.robot.get_links_quat()[27])
+
+    print("right ee current pose: ", dual_arm.robot.get_links_pos()[31], dual_arm.robot.get_links_quat()[31])
 
     # Move to start pose
     left_arm_joints = np.array([radians(161), radians(-60), radians(90), radians(-145), radians(50), radians(-15)])
