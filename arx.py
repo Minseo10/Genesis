@@ -131,7 +131,7 @@ class ARX:
             target: array-like
                 If pose is True, it should be a 7-element array where the first 3 elements are the target position
                 (in meters) and the next 4 elements are the target orientation as a
-                normalized quaternion [x, y, z, w].
+                normalized quaternion [w, x, y, z].
                 If pose is False, it should be the target joint angles in radians.
 
             left: bool, optional
@@ -148,11 +148,11 @@ class ARX:
         # target is end effector pose
         # TODO: change end effector
         if pose:
-            end_effector = robot.get_link("link12") if left else robot.get_link("link21")
+            end_effector = robot.get_link("link11") if left else robot.get_link("link20")
             qpos = robot.inverse_kinematics(
                 link=end_effector,
                 pos=target[:3],  # np array [x, y, z] (in meters)
-                quat=target[3:],  # np array [x,y,z,w] (normalized quaternion)
+                quat=target[3:],  # np array [w, x, y, z] (normalized quaternion)
                 dofs_idx_local=arm_dofs,
             )
             qpos[arm_dofs] = qpos[arm_dofs]
@@ -255,18 +255,39 @@ def main():
     arx.open_gripper(arx.robot, left=False, wide=False)
 
     # print the current end-effector pose (end-effector is temporary)
-    print("left ee current pose: ", arx.robot.get_links_pos()[20], arx.robot.get_links_quat()[20])  # link12 (idx)
-    print("right ee current pose: ", arx.robot.get_links_pos()[22], arx.robot.get_links_quat()[22])  # link21 (idx)
+    print("left ee current pose: ", arx.robot.get_links_pos()[17], arx.robot.get_links_quat()[17])  # link11 (idx)
+    print("right ee current pose: ", arx.robot.get_links_pos()[18], arx.robot.get_links_quat()[18])  # link20 (idx)
 
     # move arms
-    target_left = np.array([0.4998, 0.5, 0.35, 1.0, 0.0, 0.0, 0.0])  # modify this target pose
-    target_right = np.array([0.4998, -0.5, 0.35, 1.0, 0.0, 0.0, 0.0])  # modify this target pose
+
+    target_left = np.array([-1.57, 0.0, 0.0, -1.57, 0.0, 0.0, 0.0])  # modify this target pose
+    target_right = np.array([0.5, -0.3, 0.7, 0.5, 0.5, 0.5, -0.5])  # modify this target pose
+
+    init_qpos = np.zeros(22)
+    init_qpos[arx.body] = body_joints
+    init_qpos[arx.head] = head_joints
+    init_qpos[arx.left_arm] = target_left
+    init_qpos[arx.right_arm] = right_arm_joints
+    init_qpos[arx.left_gripper] = gripper_joints
+    init_qpos[arx.right_gripper] = gripper_joints
+
+    # arx.motion_planning(arx.robot, init_qpos, left=True, holding=False, pose=False)
+    arx.motion_planning(arx.robot, target_right, left=False, holding=False, pose=True)
+
+    print("left ee current pose: ", arx.robot.get_links_pos()[17], arx.robot.get_links_quat()[17])  # link11 (idx)
+    print("right ee current pose: ", arx.robot.get_links_pos()[18], arx.robot.get_links_quat()[18])  # link20 (idx)
+
+    print("get right qpos:", arx.robot.get_dofs_position(dofs_idx_local=arx.right_arm))
+
+    target_left = np.array([0.35, 0.15, 0.226, 1.0, 0.0, 0.0, 0.0])  # modify this target pose
+    target_right = np.array([0.9, -0.3, 0.7, 1.0, 0.0, 0.0, 0.0])  # modify this target pose
+
     arx.motion_planning(arx.robot, target_left, left=True, holding=False, pose=True)
-    arx.motion_planning(arx.robot, target_right, left=True, holding=False, pose=True)
+    # arx.motion_planning(arx.robot, target_right, left=False, holding=False, pose=True)
 
     # close the grippers
-    arx.close_gripper(arx.robot, left=False)
-    arx.close_gripper(arx.robot, left=True)
+    # arx.close_gripper(arx.robot, left=False)
+    # arx.close_gripper(arx.robot, left=True)
 
     for i in range(10000):
         arx.scene.step()
