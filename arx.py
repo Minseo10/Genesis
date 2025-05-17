@@ -221,6 +221,78 @@ class ARX:
             self.scene.step()
 
 
+def calibration():
+    from scipy.spatial.transform import Rotation as R  # scipy 사용
+
+    # Initialize
+    gs.init(backend=gs.gpu)
+
+    # Initialize ARX X7
+    arx = ARX()
+
+    # Build scene
+    arx.scene.build()
+
+    # Set control gains
+    arx.set_control_gains(arx.robot)
+
+    # Move to start pose
+    body_joints = np.array([0.50, -0.00165])
+    head_joints = np.array([0.0, 0.0])
+    left_arm_joints = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    right_arm_joints = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    gripper_joints = np.array([0.00744, 0.00744])
+    init_qpos = np.zeros(22)
+    init_qpos[arx.body] = body_joints
+    init_qpos[arx.head] = head_joints
+    init_qpos[arx.left_arm] = left_arm_joints
+    init_qpos[arx.right_arm] = right_arm_joints
+    init_qpos[arx.left_gripper] = gripper_joints
+    init_qpos[arx.right_gripper] = gripper_joints
+    arx.motion_planning(arx.robot, init_qpos, holding=False, pose=False)
+
+    # current end-effector pose (left & right)
+    left_world = np.concatenate((arx.robot.get_links_pos()[17].cpu().numpy(), arx.robot.get_links_quat()[17].cpu().numpy()), axis=0)
+    right_world = np.concatenate((arx.robot.get_links_pos()[18].cpu().numpy(), arx.robot.get_links_quat()[18].cpu().numpy()), axis=0)
+    print("left world: ", left_world)  # link11 (idx)
+    print("right world: ", right_world)  # link20 (idx)
+
+
+    head_yaw = np.concatenate((arx.robot.get_links_pos()[3].cpu().numpy(), arx.robot.get_links_quat()[3].cpu().numpy()), axis=0)
+    head_pitch = np.concatenate((arx.robot.get_links_pos()[6].cpu().numpy(), arx.robot.get_links_quat()[6].cpu().numpy()), axis=0)
+    print("head yaw: ", head_yaw)
+    print("head pitch: ", head_pitch)
+
+    # left_world에 대한 head_pitch, right_world에 대한 head_pitch를 4x4 homogeneuos matrix 형태로 구한다
+    # Function: pos, quat → 4x4 homogeneous matrix
+    def get_homogeneous_matrix(pos, quat):
+        quat = quat[[1, 2, 3, 0]]  # [w x y z] -> [x y z w]
+        rot = R.from_quat(quat).as_matrix()  # (3, 3) rotation matrix from x,y,z,w
+        mat = np.eye(4)
+        mat[:3, :3] = rot
+        mat[:3, 3] = pos
+        return mat
+
+    # Compute world → head_pitch
+    H_head_yaw = get_homogeneous_matrix(head_yaw[:3], head_yaw[3:])
+
+    # Compute world → left_ee and right_ee
+    H_left = get_homogeneous_matrix(left_world[:3], left_world[3:])
+    H_right = get_homogeneous_matrix(right_world[:3], right_world[3:])
+
+    H_left_to_yaw = np.linalg.inv(H_left) @ H_head_yaw
+    H_right_to_yaw= np.linalg.inv(H_right) @ H_head_yaw
+
+    print("Head_yaw w.r.t Left_EE (4x4):")
+    print(H_left_to_yaw)
+
+    print("Head_yaw w.r.t Right_EE (4x4):")
+    print(H_right_to_yaw)
+
+    for i in range(10000):
+        arx.scene.step()
+
+
 def main():
     # Initialize
     gs.init(backend=gs.gpu)
@@ -294,4 +366,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    calibration()
