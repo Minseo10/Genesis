@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from math import pi
 
 import numpy as np
@@ -6,10 +7,13 @@ import taichi as ti
 import genesis as gs
 import genesis.utils.geom as gu
 
+if TYPE_CHECKING:
+    from genesis.engine.solvers.rigid.rigid_solver_decomp import RigidSolver
+
 
 @ti.data_oriented
 class SupportField:
-    def __init__(self, rigid_solver):
+    def __init__(self, rigid_solver: "RigidSolver") -> None:
         self.solver = rigid_solver
         self.support_res = 180
         if self.solver._enable_collision:
@@ -29,7 +33,7 @@ class SupportField:
         v = np.stack((x, y, z), axis=-1)
         return v
 
-    def _compute_support(self):
+    def _compute_support(self) -> None:
         v = self._get_direction_grid()
         v1 = v.reshape([-1, 3])
         support_v = []
@@ -44,8 +48,15 @@ class SupportField:
                 vert_end = self.solver.geoms_info.vert_end[i_g]
                 this_pos = init_pos[vert_start:vert_end]
 
-                dot_products = v1.dot(this_pos.T)
-                max_indices = np.argmax(dot_products, axis=1)
+                num_v = v1.shape[0]
+                window_size = int(5e8 // this_pos.shape[0])
+                max_indices = np.empty(num_v, dtype=np.intp)
+
+                for i in range(0, num_v, window_size):
+                    end = min(i + window_size, num_v)
+                    dot_chunk = v1[i:end] @ this_pos.T
+                    max_indices[i:end] = np.argmax(dot_chunk, axis=1)
+
                 support = this_pos[max_indices]
 
                 support_cell_start.append(start)

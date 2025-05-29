@@ -3,7 +3,7 @@
 ![Teaser](imgs/teaser.png)
 
 [![PyPI - Version](https://img.shields.io/pypi/v/genesis-world)](https://pypi.org/project/genesis-world/)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/genesis-world)](https://pypi.org/project/genesis-world/)
+[![PyPI Downloads](https://static.pepy.tech/badge/genesis-world)](https://pepy.tech/projects/genesis-world)
 [![GitHub Issues](https://img.shields.io/github/issues/Genesis-Embodied-AI/Genesis)](https://github.com/Genesis-Embodied-AI/Genesis/issues)
 [![GitHub Discussions](https://img.shields.io/github/discussions/Genesis-Embodied-AI/Genesis)](https://github.com/Genesis-Embodied-AI/Genesis/discussions)
 [![Discord](https://img.shields.io/discord/1322086972302430269?logo=discord)](https://discord.gg/nukCuhB47p)
@@ -22,7 +22,7 @@
 - [2025-01-08] Released v0.2.1 🎊 🎉
 - [2025-01-08] Created [Discord](https://discord.gg/nukCuhB47p) and [Wechat](https://drive.google.com/uc?export=view&id=1ZS9nnbQ-t1IwkzJlENBYqYIIOOZhXuBZ) group.
 - [2024-12-25] Added a [docker](#docker) including support for the ray-tracing renderer
-- [2024-12-24] Added guidelines for [contributing to Genesis](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/CONTRIBUTING.md)
+- [2024-12-24] Added guidelines for [contributing to Genesis](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/.github/CONTRIBUTING.md)
 
 ## Table of Contents
 
@@ -76,15 +76,20 @@ Install **PyTorch** first following the [official instructions](https://pytorch.
 
 Then, install Genesis via PyPI:
 ```bash
-pip install genesis-world  # Requires Python >=3.9;
+pip install genesis-world  # Requires Python>=3.10,<3.13;
 ```
 
-For the latest version, clone the repository and install locally:
+For the latest version to date, make sure that `pip` is up-to-date via `pip install --upgrade pip`, then run command:
+```bash
+pip install git+https://github.com/Genesis-Embodied-AI/Genesis.git
+```
+Note that the package must still be updated manually to sync with main branch.
 
+Users seeking to edit the source code of Genesis are encourage to install Genesis in editable mode. First, make sure that `genesis-world` has been uninstalled, then clone the repository and install locally:
 ```bash
 git clone https://github.com/Genesis-Embodied-AI/Genesis.git
 cd Genesis
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ## Docker
@@ -102,6 +107,7 @@ xhost +local:root # Allow the container to access the display
 
 docker run --gpus all --rm -it \
 -e DISPLAY=$DISPLAY \
+-v /dev/dri:/dev/dri \
 -v /tmp/.X11-unix/:/tmp/.X11-unix \
 -v $PWD:/workspace \
 genesis
@@ -119,7 +125,7 @@ The Genesis project is an open and collaborative effort. We welcome all forms of
 - **Bug reports** through GitHub Issues.
 - **Suggestions** to improve Genesis's usability.
 
-Refer to our [contribution guide](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/CONTRIBUTING.md) for more details.
+Refer to our [contribution guide](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/.github/CONTRIBUTING.md) for more details.
 
 ## Support
 
@@ -172,9 +178,9 @@ Genesis is a large scale effort that integrates state-of-the-art technologies of
 If you use Genesis in your research, please consider citing:
 
 ```bibtex
-@software{Genesis,
+@misc{Genesis,
   author = {Genesis Authors},
-  title = {Genesis: A Universal and Generative Physics Engine for Robotics and Beyond},
+  title = {Genesis: A Generative and Universal Physics Engine for Robotics and Beyond},
   month = {December},
   year = {2024},
   url = {https://github.com/Genesis-Embodied-AI/Genesis}

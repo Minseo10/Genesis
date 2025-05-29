@@ -9,6 +9,18 @@ from genesis.repr_base import RBC
 
 @ti.data_oriented
 class Emitter(RBC):
+    """
+    A particle emitter for fluid or material simulation.
+
+    The Emitter manages the generation of particles into the simulation domain, allowing directional or omnidirectional
+    emissions with various droplet shapes. It supports resetting, shape-based emission, and spherical omni-emission.
+
+    Parameters
+    ----------
+    max_particles : int
+        The maximum number of particles that this emitter can handle.
+    """
+
     def __init__(self, max_particles):
         self._uid = gs.UID()
         self._entity = None
@@ -22,6 +34,14 @@ class Emitter(RBC):
         )
 
     def set_entity(self, entity):
+        """
+        Assign an entity to the emitter and initialize relevant simulation and solver references.
+
+        Parameters
+        ----------
+        entity : Entity
+            The entity to associate with the emitter. This entity should contain the solver, simulation context, and particle sampler.
+        """
         self._entity = entity
         self._sim = entity.sim
         self._solver = entity.solver
@@ -29,6 +49,9 @@ class Emitter(RBC):
         gs.logger.info(f"~<{self._repr_briefer()}>~ created using ~<{entity._repr_briefer()}.")
 
     def reset(self):
+        """
+        Reset the emitter's internal particle index to start emitting from the beginning.
+        """
         self._next_particle = 0
 
     def emit(
@@ -42,6 +65,33 @@ class Emitter(RBC):
         speed=1.0,
         p_size=None,
     ):
+        """
+        Emit particles in a specified shape and direction from a nozzle.
+
+        Parameters
+        ----------
+        droplet_shape : str
+            The shape of the emitted droplet. Options: "circle", "sphere", "square", "rectangle".
+        droplet_size : float or tuple
+            Size of the droplet. A single float for symmetric shapes, or a tuple of (width, height) for rectangles.
+        droplet_length : float, optional
+            Length of the droplet in the emitting direction. If None, calculated from speed and simulation timing.
+        pos : tuple of float
+            World position of the nozzle from which the droplet is emitted.
+        direction : tuple of float
+            Direction vector of the emitted droplet.
+        theta : float
+            Rotation angle (in radians) around the droplet axis.
+        speed : float
+            Emission speed of the particles.
+        p_size : float, optional
+            Particle size used for filling the droplet. Defaults to the solver's particle size.
+
+        Raises
+        ------
+        Exception
+            If the shape is unsupported or the emission would place particles outside the simulation boundary.
+        """
         assert self._entity is not None
 
         if droplet_shape in ["circle", "sphere", "square"]:
@@ -101,12 +151,16 @@ class Emitter(RBC):
                 positions, gu.trans_R_to_T(pos, gu.z_to_R(direction) @ gu.axis_angle_to_R(np.array([0, 0, 1]), theta))
             ).astype(gs.np_float)
 
+            positions = np.tile(positions[np.newaxis], (self._sim._B, 1, 1))
+
             if not self._solver.boundary.is_inside(positions):
                 gs.raise_exception("Emitted particles are outside the boundary.")
 
-            n_particles = len(positions)
+            n_particles = positions.shape[1]
 
+            # Expand vels with batch dimension
             vels = np.tile(direction * speed, (n_particles, 1)).astype(gs.np_float)
+            vels = np.tile(vels[np.newaxis], (self._sim._B, 1, 1))
 
             if n_particles > self._entity.n_particles:
                 gs.logger.warning(
@@ -216,20 +270,25 @@ class Emitter(RBC):
 
     @property
     def uid(self):
+        """The unique identifier of the emitter."""
         return self._uid
 
     @property
     def entity(self):
+        """The entity associated with the emitter."""
         return self._entity
 
     @property
     def max_particles(self):
+        """The maximum number of particles this emitter can emit."""
         return self._max_particles
 
     @property
     def solver(self):
+        """The solver used by the emitter's associated entity."""
         return self._solver
 
     @property
     def next_particle(self):
+        """The index of the next particle to be emitted."""
         return self._next_particle

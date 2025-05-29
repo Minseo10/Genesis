@@ -5,9 +5,14 @@ Author: Matthew Matl
 
 import os
 
+from OpenGL.GL import *
+
 from .constants import RenderFlags
 from .renderer import Renderer
 from .shader_program import ShaderProgram, ShaderProgramCache
+
+
+MODULE_DIR = os.path.dirname(__file__)
 
 
 class OffscreenRenderer(object):
@@ -68,6 +73,7 @@ class OffscreenRenderer(object):
         seg=False,
         ret_depth=False,
         plane_reflection=False,
+        env_separate_rigid=False,
         normal=False,
     ):
         """Render a scene with the given set of flags.
@@ -112,6 +118,9 @@ class OffscreenRenderer(object):
         if plane_reflection:
             flags |= RenderFlags.REFLECTIVE_FLOOR
 
+        if env_separate_rigid:
+            flags |= RenderFlags.ENV_SEPARATE
+
         if seg:
             seg_node_map = self._seg_node_map
             flags |= RenderFlags.SEG
@@ -134,25 +143,29 @@ class OffscreenRenderer(object):
                 retval = color, depth
 
         if normal:
-
             class CustomShaderCache:
                 def __init__(self):
                     self.program = None
 
                 def get_program(self, vertex_shader, fragment_shader, geometry_shader=None, defines=None):
                     if self.program is None:
-                        absolute_path = os.path.abspath(__file__)
                         self.program = ShaderProgram(
-                            os.path.join(absolute_path.replace("offscreen.py", ""), "shaders/mesh_normal.vert"),
-                            os.path.join(absolute_path.replace("offscreen.py", ""), "shaders/mesh_normal.frag"),
+                            os.path.join(MODULE_DIR, "shaders/mesh_normal.vert"),
+                            os.path.join(MODULE_DIR, "shaders/mesh_normal.frag"),
                             defines=defines,
                         )
                     return self.program
 
             old_cache = renderer._program_cache
             renderer._program_cache = CustomShaderCache()
-            normal_arr, _ = renderer.render(scene, RenderFlags.FLAT | RenderFlags.OFFSCREEN)
+
+            flags = RenderFlags.FLAT | RenderFlags.OFFSCREEN
+            if env_separate_rigid:
+                flags |= RenderFlags.ENV_SEPARATE
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            normal_arr, _ = renderer.render(scene, flags, is_first_pass=False)
             retval = retval + (normal_arr,)
+
             renderer._program_cache = old_cache
 
         # Make the platform not current
@@ -181,9 +194,11 @@ class OffscreenRenderer(object):
         elif platform == "egl":
             from .platforms import egl
 
-            device_id = int(os.environ.get("EGL_DEVICE_ID", "0"))
-            egl_device = egl.get_device_by_index(device_id)
-            self._platform = egl.EGLPlatform(self.viewport_width, self.viewport_height, device=egl_device)
+            if "EGL_DEVICE_ID" in os.environ:
+                device_id = int(os.environ["EGL_DEVICE_ID"])
+            else:
+                device_id = None
+            self._platform = egl.EGLPlatform(self.viewport_width, self.viewport_height, device_id)
         elif platform == "osmesa":
             from .platforms.osmesa import OSMesaPlatform
 

@@ -1,11 +1,13 @@
+from typing import TYPE_CHECKING
 import taichi as ti
 
 from genesis.engine.boundaries import FloorBoundary
-from genesis.engine.entities import ToolEntity
 from genesis.engine.states.solvers import ToolSolverState
 from genesis.utils.misc import *
 
 from .base_solver import Solver
+
+from genesis.engine.entities.tool_entity.tool_entity import ToolEntity
 
 
 @ti.data_oriented
@@ -61,7 +63,7 @@ class ToolSolver(Solver):
             state = None
         return state
 
-    def set_state(self, f, state):
+    def set_state(self, f, state, envs_idx=None):
         if state is not None:
             assert len(state) == len(self._entities)
             for i, entity in enumerate(self._entities):

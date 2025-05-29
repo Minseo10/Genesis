@@ -1,7 +1,13 @@
+import os
+
 import numpy as np
 import torch
 
 import genesis as gs
+import genesis.utils.geom as gu
+from genesis.engine.entities.base_entity import Entity
+from genesis.engine.force_fields import ForceField
+from genesis.engine.materials.base import Material
 from genesis.engine.entities import Emitter
 from genesis.engine.simulator import Simulator
 from genesis.options import (
@@ -18,9 +24,12 @@ from genesis.options import (
     ViewerOptions,
     VisOptions,
 )
+from genesis.options.morphs import Morph
+from genesis.options.surfaces import Surface
 from genesis.options.renderers import Rasterizer, Renderer
 from genesis.repr_base import RBC
 from genesis.utils.tools import FPSTracker
+from genesis.utils.misc import redirect_libc_stderr, tensor_to_array
 from genesis.vis import Visualizer
 
 
@@ -162,19 +171,19 @@ class Scene(RBC):
 
     def _validate_options(
         self,
-        sim_options,
-        coupler_options,
-        tool_options,
-        rigid_options,
-        avatar_options,
-        mpm_options,
-        sph_options,
-        fem_options,
-        sf_options,
-        pbd_options,
-        vis_options,
-        viewer_options,
-        renderer,
+        sim_options: SimOptions,
+        coupler_options: CouplerOptions,
+        tool_options: ToolOptions,
+        rigid_options: RigidOptions,
+        avatar_options: AvatarOptions,
+        mpm_options: MPMOptions,
+        sph_options: SPHOptions,
+        fem_options: FEMOptions,
+        sf_options: SFOptions,
+        pbd_options: PBDOptions,
+        vis_options: VisOptions,
+        viewer_options: ViewerOptions,
+        renderer: Renderer,
     ):
         if not isinstance(sim_options, SimOptions):
             gs.raise_exception("`sim_options` should be an instance of `SimOptions`.")
@@ -218,11 +227,11 @@ class Scene(RBC):
     @gs.assert_unbuilt
     def add_entity(
         self,
-        morph,
-        material=None,
-        surface=None,
-        visualize_contact=False,
-        vis_mode=None,
+        morph: Morph,
+        material: Material | None = None,
+        surface: Surface | None = None,
+        visualize_contact: bool = False,
+        vis_mode: str | None = None,
     ):
         """
         Add an entity to the scene.
@@ -342,19 +351,11 @@ class Scene(RBC):
         else:
             gs.raise_exception()
 
-        # Rigid entities will convexify geom by default
-        if hasattr(morph, "convexify") and morph.convexify is None:
-            if isinstance(material, (gs.materials.Rigid, gs.materials.Avatar)):
-                morph.convexify = True
-            else:
-                morph.convexify = False
-
-        # Rigid entities will decompose nonconvex geom by default
-        if hasattr(morph, "decompose_nonconvex") and morph.decompose_nonconvex is None:
-            if isinstance(material, (gs.materials.Rigid, gs.materials.Avatar)):
-                morph.decompose_nonconvex = True
-            else:
-                morph.decompose_nonconvex = False
+        # Set material-dependent default options
+        if isinstance(morph, gs.morphs.FileMorph):
+            # Rigid entities will convexify geom by default
+            if morph.convexify is None:
+                morph.convexify = isinstance(material, (gs.materials.Rigid, gs.materials.Avatar))
 
         entity = self._sim._add_entity(morph, material, surface, visualize_contact)
 
@@ -363,8 +364,8 @@ class Scene(RBC):
     @gs.assert_unbuilt
     def link_entities(
         self,
-        parent_entity,
-        child_entity,
+        parent_entity: Entity,
+        child_entity: Entity,
         parent_link_name="",
         child_link_name="",
     ):
@@ -406,7 +407,7 @@ class Scene(RBC):
     @gs.assert_unbuilt
     def add_light(
         self,
-        morph,
+        morph: Morph,
         color=(1.0, 1.0, 1.0, 1.0),
         intensity=20.0,
         revert_dir=False,
@@ -482,9 +483,9 @@ class Scene(RBC):
         GUI : bool
             Whether to display the camera's rendered image in a separate GUI window.
         spp : int, optional
-            Samples per pixel. Defaults to 256.
+            Samples per pixel. Only available when using RayTracer renderer. Defaults to 256.
         denoise : bool
-            Whether to denoise the camera's rendered image.
+            Whether to denoise the camera's rendered image. Only available when using the RayTracer renderer.. Defaults to True. If OptiX denoiser is not available in your platform, consider enabling the OIDN denoiser option when building the RayTracer.
 
         Returns
         -------
@@ -497,9 +498,9 @@ class Scene(RBC):
     @gs.assert_unbuilt
     def add_emitter(
         self,
-        material,
+        material: Material,
         max_particles=20000,
-        surface=None,
+        surface: Surface | None = None,
     ):
         """
         Add a fluid emitter to the scene.
@@ -543,7 +544,7 @@ class Scene(RBC):
         return emitter
 
     @gs.assert_unbuilt
-    def add_force_field(self, force_field: gs.force_fields.ForceField):
+    def add_force_field(self, force_field: ForceField):
         """
         Add a force field to the scene.
 
@@ -566,7 +567,7 @@ class Scene(RBC):
         self,
         n_envs=0,
         env_spacing=(0.0, 0.0),
-        n_envs_per_row=None,
+        n_envs_per_row: int | None = None,
         center_envs_at_origin=True,
         compile_kernels=True,
     ):
@@ -590,7 +591,8 @@ class Scene(RBC):
             self._parallelize(n_envs, env_spacing, n_envs_per_row, center_envs_at_origin)
 
             # simulator
-            self._sim.build()
+            with open(os.devnull, "w") as stderr, redirect_libc_stderr(stderr):
+                self._sim.build()
 
             # reset state
             self._reset()
@@ -613,10 +615,10 @@ class Scene(RBC):
 
     def _parallelize(
         self,
-        n_envs,
-        env_spacing,
-        n_envs_per_row,
-        center_envs_at_origin,
+        n_envs: int,
+        env_spacing: tuple[float, float],
+        n_envs_per_row: int,
+        center_envs_at_origin: bool,
     ):
         self.n_envs = n_envs
         self.env_spacing = env_spacing
@@ -662,7 +664,7 @@ class Scene(RBC):
             self._para_level = gs.PARA_LEVEL.ALL
 
     @gs.assert_built
-    def reset(self, state=None):
+    def reset(self, state: dict | None = None, envs_idx=None):
         """
         Resets the scene to its initial state.
 
@@ -672,15 +674,15 @@ class Scene(RBC):
             The state to reset the scene to. If None, the scene will be reset to its initial state. If this is given, the scene's registerered initial state will be updated to this state.
         """
         gs.logger.info(f"Resetting Scene ~~~<{self._uid}>~~~.")
-        self._reset(state)
+        self._reset(state, envs_idx)
 
-    def _reset(self, state=None):
+    def _reset(self, state=None, envs_idx=None):
         if self._is_built:
             if state is None:
                 state = self._init_state
             else:
                 self._init_state = state
-            self._sim.reset(state)
+            self._sim.reset(state, envs_idx)
         else:
             self._init_state = self._get_state()
 
@@ -688,8 +690,10 @@ class Scene(RBC):
         self._forward_ready = True
         self._reset_grad()
 
+        # TODO: sets _t = -1; not sure this is env isolation safe
         self._visualizer.reset()
 
+        # TODO: sets _next_particle = 0; not sure this is env isolation safe
         for emitter in self._emitters:
             emitter.reset()
 
@@ -712,7 +716,7 @@ class Scene(RBC):
         return self._get_state()
 
     @gs.assert_built
-    def step(self, update_visualizer=True):
+    def step(self, update_visualizer=True, refresh_visualizer=True):
         """
         Runs a simulation step forward in time.
         """
@@ -724,7 +728,7 @@ class Scene(RBC):
         self._t += 1
 
         if update_visualizer:
-            self._visualizer.update(force=False)
+            self._visualizer.update(force=False, auto=refresh_visualizer)
 
         if self._show_FPS:
             self.FPS_tracker.step()
@@ -749,9 +753,14 @@ class Scene(RBC):
             The radius of the line (represented as a cylinder)
         color : array_like, shape (4,), optional
             The color of the line in RGBA format.
+
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
         """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_line(start, end, radius, color)
+            return self._visualizer.context.draw_debug_line(start, end, radius, color)
 
     @gs.assert_built
     def draw_debug_arrow(self, pos, vec=(0, 0, 1), radius=0.01, color=(1.0, 0.0, 0.0, 0.5)):
@@ -768,10 +777,14 @@ class Scene(RBC):
             The radius of the arrow body (represented as a cylinder).
         color : array_like, shape (4,), optional
             The color of the arrow in RGBA format.
-        """
 
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
+        """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_arrow(pos, vec, radius, color)
+            return self._visualizer.context.draw_debug_arrow(pos, vec, radius, color)
 
     @gs.assert_built
     def draw_debug_frame(self, T, axis_length=1.0, origin_size=0.015, axis_radius=0.01):
@@ -788,10 +801,38 @@ class Scene(RBC):
             The size of the origin point (represented as a sphere).
         axis_radius : float, optional
             The radius of the axes (represented as cylinders).
-        """
 
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
+        """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_frame(T, axis_length, origin_size, axis_radius)
+            return self._visualizer.context.draw_debug_frame(T, axis_length, origin_size, axis_radius)
+
+    @gs.assert_built
+    def draw_debug_frames(self, Ts, axis_length=1.0, origin_size=0.015, axis_radius=0.01):
+        """
+        Draws 3-axis coordinate frames in the scene for visualization.
+
+        Parameters
+        ----------
+        Ts : array_like, shape (n, 4, 4)
+            The transformation matrices of frames.
+        axis_length : float, optional
+            The length of the axes.
+        origin_size : float, optional
+            The size of the origin point (represented as a sphere).
+        axis_radius : float, optional
+            The radius of the axes (represented as cylinders).
+
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
+        """
+        with self._visualizer.viewer_lock:
+            return self._visualizer.context.draw_debug_frames(Ts, axis_length, origin_size, axis_radius)
 
     @gs.assert_built
     def draw_debug_mesh(self, mesh, pos=np.zeros(3), T=None):
@@ -806,10 +847,14 @@ class Scene(RBC):
             The position of the mesh in the scene.
         T : array_like, shape (4, 4) | None, optional
             The transformation matrix of the mesh. If None, the mesh will be drawn at the position specified by `pos`. Otherwise, `T` has a higher priority than `pos`.
-        """
 
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
+        """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_mesh(mesh, pos, T)
+            return self._visualizer.context.draw_debug_mesh(mesh, pos, T)
 
     @gs.assert_built
     def draw_debug_sphere(self, pos, radius=0.01, color=(1.0, 0.0, 0.0, 0.5)):
@@ -824,9 +869,14 @@ class Scene(RBC):
             radius of the sphere.
         color : array_like, shape (4,), optional
             The color of the sphere in RGBA format.
+
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
         """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_sphere(pos, radius, color)
+            return self._visualizer.context.draw_debug_sphere(pos, radius, color)
 
     @gs.assert_built
     def draw_debug_spheres(self, poss, radius=0.01, color=(1.0, 0.0, 0.0, 0.5)):
@@ -841,9 +891,14 @@ class Scene(RBC):
             The radius of the spheres.
         color : array_like, shape (4,), optional
             The color of the spheres in RGBA format.
+
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
         """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_spheres(poss, radius, color)
+            return self._visualizer.context.draw_debug_spheres(poss, radius, color)
 
     @gs.assert_built
     def draw_debug_box(
@@ -866,10 +921,14 @@ class Scene(RBC):
             Whether to draw the box as a wireframe.
         wireframe_radius : float, optional
             The radius of the wireframe lines.
-        """
 
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
+        """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_box(
+            return self._visualizer.context.draw_debug_box(
                 bounds, color, wireframe=wireframe, wireframe_radius=wireframe_radius
             )
 
@@ -884,10 +943,67 @@ class Scene(RBC):
             The positions of the points.
         colors : array_like, shape (4,), optional
             The color of the points in RGBA format.
-        """
 
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object.
+        """
         with self._visualizer.viewer_lock:
-            self._visualizer.context.draw_debug_points(poss, colors)
+            return self._visualizer.context.draw_debug_points(poss, colors)
+
+    @gs.assert_built
+    def draw_debug_path(self, qposs, entity, link_idx=-1, density=0.3, frame_scaling=1.0):
+        """
+        Draws a planned joint trajectory in the scene for visualization.
+
+        Parameters
+        ----------
+        qposs : array_like, shape (N, M)
+            The joint positions of the planned points.
+            N is the number of configurations (i.e., trajectory points).
+            M is the number of degrees of freedom for the entity (i.e., joint dimensions).
+        entity : gs.engine.entities.RigidEntity
+            The rigid entity whose forward kinematics are used to compute the trajectory path.
+        link_idx : int, optional
+            The link id of the rigid entity to visualize. Defeault is -1.
+        density : float, optional
+            Controls the sampling density of the trajectory points to visualize. Default is 0.3.
+        frame_scaling : float, optional
+            Scaling factor for the visualization frames' size. Affects the length and thickness of the debug frames. Default is 1.0.
+
+        Returns
+        -------
+        node : genesis.ext.pyrender.mesh.Mesh
+            The created debug object representing the visualized trajectory.
+
+        Notes
+        -----
+        The function uses forward kinematics (FK) to convert joint positions to Cartesian space and render debug frames.
+        The density parameter reduces FK computational load by sampling fewer points, with 1.0 representing the whole trajectory.
+        """
+        with self._visualizer.viewer_lock:
+            N = len(qposs)
+            density = np.clip(density, 0.0, 1.0)
+            N_new = int(N * density)
+            indices = torch.linspace(0, N - 2, N_new, dtype=int)
+
+            Ts = np.zeros((N_new, 4, 4))
+            for i in range(N_new):
+                pos, quat = entity.forward_kinematics(qposs[indices[i]])
+                Ts[i] = tensor_to_array(gu.trans_quat_to_T(pos[link_idx], quat[link_idx]))
+
+            return self._visualizer.context.draw_debug_frames(
+                Ts, axis_length=frame_scaling * 0.1, origin_size=0.001, axis_radius=frame_scaling * 0.005
+            )
+
+    @gs.assert_built
+    def clear_debug_object(self, object):
+        """
+        Clears all the debug objects in the scene.
+        """
+        with self._visualizer.viewer_lock:
+            self._visualizer.context.clear_debug_object(object)
 
     @gs.assert_built
     def clear_debug_objects(self):

@@ -1,7 +1,22 @@
+from typing import TYPE_CHECKING
 import numpy as np
 import taichi as ti
 
 import genesis as gs
+from genesis.engine.entities.base_entity import Entity
+from genesis.options.morphs import Morph
+from genesis.options.solvers import (
+    AvatarOptions,
+    CouplerOptions,
+    FEMOptions,
+    MPMOptions,
+    PBDOptions,
+    RigidOptions,
+    SFOptions,
+    SPHOptions,
+    SimOptions,
+    ToolOptions,
+)
 from genesis.repr_base import RBC
 
 from .coupler import Coupler
@@ -18,6 +33,9 @@ from .solvers import (
 )
 from .states.cache import QueriedStates
 from .states.solvers import SimState
+
+if TYPE_CHECKING:
+    from genesis.engine.scene import Scene
 
 
 @ti.data_oriented
@@ -53,17 +71,17 @@ class Simulator(RBC):
 
     def __init__(
         self,
-        scene,
-        options,
-        coupler_options,
-        tool_options,
-        rigid_options,
-        avatar_options,
-        mpm_options,
-        sph_options,
-        fem_options,
-        sf_options,
-        pbd_options,
+        scene: "Scene",
+        options: SimOptions,
+        coupler_options: CouplerOptions,
+        tool_options: ToolOptions,
+        rigid_options: RigidOptions,
+        avatar_options: AvatarOptions,
+        mpm_options: MPMOptions,
+        sph_options: SPHOptions,
+        fem_options: FEMOptions,
+        sf_options: SFOptions,
+        pbd_options: PBDOptions,
     ):
         self._scene = scene
 
@@ -99,7 +117,7 @@ class Simulator(RBC):
         self.fem_solver = FEMSolver(self.scene, self, self.fem_options)
         self.sf_solver = SFSolver(self.scene, self, self.sf_options)
 
-        self._solvers = gs.List(
+        self._solvers: list[Solver] = gs.List(
             [
                 self.tool_solver,
                 self.rigid_solver,
@@ -112,7 +130,7 @@ class Simulator(RBC):
             ]
         )
 
-        self._active_solvers = gs.List()
+        self._active_solvers: list[Solver] = gs.List()
 
         # coupler
         self._coupler = Coupler(self, self.coupler_options)
@@ -121,9 +139,9 @@ class Simulator(RBC):
         self._queried_states = QueriedStates()
 
         # entities
-        self._entities = gs.List()
+        self._entities: list[Entity] = gs.List()
 
-    def _add_entity(self, morph, material, surface, visualize_contact=False):
+    def _add_entity(self, morph: Morph, material, surface, visualize_contact=False):
         if isinstance(material, gs.materials.Tool):
             entity = self.tool_solver.add_entity(self.n_entities, material, morph, surface)
 
@@ -176,20 +194,22 @@ class Simulator(RBC):
                     self._rigid_only = False
         self._coupler.build()
 
-        if self.n_envs > 0 and not self._rigid_only:
-            gs.raise_exception("Batching is only supported for rigid-only scenes as of now.")
+        if self.n_envs > 0 and self.sf_solver.is_active():
+            gs.raise_exception("Batching is not supported for SF solver as of now.")
 
         # hybrid
         for entity in self._entities:
             if isinstance(entity, HybridEntity):
                 entity.build()
 
-    def reset(self, state):
+    def reset(self, state, envs_idx=None):
         for solver, solver_state in zip(self._solvers, state):
-            solver.set_state(0, solver_state)
+            solver.set_state(0, solver_state, envs_idx)
 
+        # TODO: keeping as is for now, since coupler is currently for non-batched scenes
         self.coupler.reset()
 
+        # TODO: keeping as is for now
         self.reset_grad()
         self._cur_substep_global = 0
 

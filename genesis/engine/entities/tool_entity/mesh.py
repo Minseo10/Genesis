@@ -27,9 +27,9 @@ class Mesh:
     def load_file(self):
         # mesh
         self.process_mesh()
-        self.raw_vertices = np.ascontiguousarray(np.array(self.mesh.vertices, dtype=np.float32))
-        self.raw_vertex_normals_np = np.ascontiguousarray(np.array(self.mesh.vertex_normals, dtype=np.float32))
-        self.faces_np = np.ascontiguousarray(np.array(self.mesh.faces, dtype=np.int32)).flatten()
+        self.raw_vertices = np.asarray(self.mesh.vertices, dtype=np.float32, order="C")
+        self.raw_vertex_normals_np = np.asarray(self.mesh.vertex_normals, dtype=np.float32, order="C")
+        self.faces_np = np.asarray(self.mesh.faces, dtype=np.int32, order="C").reshape((-1))
 
         self.n_vertices = len(self.raw_vertices)
         self.n_faces = len(self.faces_np)
@@ -45,18 +45,18 @@ class Mesh:
             raw_mesh = load_mesh(self.raw_file)
             sdf_data = compute_sdf_data(cleanup_mesh(normalize_mesh(raw_mesh)), self.sdf_res)
             self.friction = self.material.friction
-            self.sdf_voxels_np = sdf_data["voxels"].astype(gs.np_float)
+            self.sdf_voxels_np = sdf_data["voxels"].astype(gs.np_float, order="C", copy=False)
             self.sdf_res = self.sdf_voxels_np.shape[0]
-            self.T_mesh_to_sdf_np = sdf_data["T_mesh_to_sdf"].astype(gs.np_float)
+            self.T_mesh_to_sdf_np = sdf_data["T_mesh_to_sdf"].astype(gs.np_float, order="C", copy=False)
 
     def init_transform(self):
         scale = np.array(self.scale, dtype=gs.np_float)
 
         # apply initial transforms (scale then quat then pos)
         T_init = gu.scale_to_T(scale)
-        self.init_vertices_np = np.ascontiguousarray(gu.transform_by_T(self.raw_vertices, T_init).astype(np.float32))
+        self.init_vertices_np = gu.transform_by_T(self.raw_vertices, T_init).astype(np.float32, order="C", copy=False)
 
-        self.init_vertex_normals_np = self.raw_vertex_normals_np.astype(np.float32)
+        self.init_vertex_normals_np = self.raw_vertex_normals_np.astype(np.float32, order="C", copy=False)
 
         # init ti fields
         self.init_vertices = ti.Vector.field(3, dtype=gs.ti_float, shape=(self.n_vertices))
@@ -78,18 +78,10 @@ class Mesh:
         self.vertices = ti.Vector.field(3, dtype=gs.ti_float, shape=(self.n_vertices))
         self.vertex_normals = ti.Vector.field(3, dtype=gs.ti_float, shape=(self.n_vertices))
 
-    @ti.kernel
-    def update_vertices(self, f: ti.i32):
-        for i in self.vertices:
-            self.vertices[i] = gu.ti_transform_by_trans_quat(
-                self.init_vertices[i], self.entity.pos[f], self.entity.quat[f]
-            )
-            self.vertex_normals[i] = gu.ti_transform_by_quat(self.init_vertex_normals[i], self.entity.quat[f])
-
     @ti.func
-    def sdf(self, f, pos_world):
+    def sdf(self, f, pos_world, i_b):
         # sdf value from world coordinate
-        pos_mesh = gu.ti_inv_transform_by_trans_quat(pos_world, self.entity.pos[f], self.entity.quat[f])
+        pos_mesh = gu.ti_inv_transform_by_trans_quat(pos_world, self.entity.pos[f, i_b], self.entity.quat[f, i_b])
         pos_voxels = gu.ti_transform_by_T(pos_mesh, self.T_mesh_to_sdf[None])
 
         return self.sdf_(pos_voxels)
@@ -112,16 +104,16 @@ class Mesh:
         return signed_dist
 
     @ti.func
-    def normal(self, f, pos_world):
+    def normal(self, f, pos_world, i_b):
         # compute normal with finite difference
-        pos_mesh = gu.ti_inv_transform_by_trans_quat(pos_world, self.entity.pos[f], self.entity.quat[f])
+        pos_mesh = gu.ti_inv_transform_by_trans_quat(pos_world, self.entity.pos[f, i_b], self.entity.quat[f, i_b])
         pos_voxels = gu.ti_transform_by_T(pos_mesh, self.T_mesh_to_sdf[None])
         normal_vec_voxels = self.normal_(pos_voxels)
 
         R_voxels_to_mesh = self.T_mesh_to_sdf[None][:3, :3].inverse()
         normal_vec_mesh = R_voxels_to_mesh @ normal_vec_voxels
 
-        normal_vec_world = gu.ti_transform_by_quat(normal_vec_mesh, self.entity.quat[f])
+        normal_vec_world = gu.ti_transform_by_quat(normal_vec_mesh, self.entity.quat[f, i_b])
         normal_vec_world = gu.ti_normalize(normal_vec_world)
 
         return normal_vec_world
@@ -144,24 +136,26 @@ class Mesh:
         return normal_vec
 
     @ti.func
-    def vel_collider(self, f, pos_world):
-        pos_mesh = gu.ti_inv_transform_by_trans_quat(pos_world, self.entity.pos[f], self.entity.quat[f])
-        pos_world_new = gu.ti_transform_by_trans_quat(pos_mesh, self.entity.pos[f + 1], self.entity.quat[f + 1])
+    def vel_collider(self, f, pos_world, i_b):
+        pos_mesh = gu.ti_inv_transform_by_trans_quat(pos_world, self.entity.pos[f, i_b], self.entity.quat[f, i_b])
+        pos_world_new = gu.ti_transform_by_trans_quat(
+            pos_mesh, self.entity.pos[f + 1, i_b], self.entity.quat[f + 1, i_b]
+        )
         vel_collider = (pos_world_new - pos_world) / self.entity.solver.substep_dt
         return vel_collider
 
     @ti.func
-    def collide(self, f, pos_world, vel_mat):
+    def collide(self, f, pos_world, vel_mat, i_b):
         if ti.static(self.collision):
-            signed_dist = self.sdf(f, pos_world)
+            signed_dist = self.sdf(f, pos_world, i_b)
             # bigger coup_softness implies that the coupling influence extends further away from the object.
             influence = ti.min(ti.exp(-signed_dist / max(gs.EPS, self.material.coup_softness)), 1)
             if signed_dist <= 0 or influence > 0.1:
-                vel_collider = self.vel_collider(f, pos_world)
+                vel_collider = self.vel_collider(f, pos_world, i_b)
 
                 # v w.r.t collider
                 rel_v = vel_mat - vel_collider
-                normal_vec = self.normal(f, pos_world)
+                normal_vec = self.normal(f, pos_world, i_b)
                 normal_component = rel_v.dot(normal_vec)
 
                 if normal_component < 0:

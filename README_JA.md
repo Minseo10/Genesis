@@ -20,7 +20,7 @@
 ## 🔥 最新情報
 
 - [2024-12-25] [レイトレーシングレンダラー](#docker)をサポートするDockerを追加しました。
-- [2024-12-24] [Genesisへの貢献方法](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/CONTRIBUTING.md)に関するガイドラインを追加しました。
+- [2024-12-24] [Genesisへの貢献方法](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/.github/CONTRIBUTING.md)に関するガイドラインを追加しました。
 
 ## 目次
 
@@ -69,17 +69,25 @@ Genesisの目指すところ：
 GenesisはPyPIで利用可能です：
 
 ```bash
-pip install genesis-world  # Python >=3.9 が必要です;
+pip install genesis-world  # Python>=3.10,<3.13 が必要です;
 ```
 
 また、**PyTorch**を[公式手順](https://pytorch.org/get-started/locally/)に従ってインストールする必要があります。
 
-最新バージョンを利用するには、リポジトリをクローンしてローカルにインストールしてください：
+最新版を利用する場合はこのレポジトリから直接インストールしてください:
+
+```bash
+pip install git+https://github.com/Genesis-Embodied-AI/Genesis.git
+```
+
+このパッケージは定期的に手動で最新版と同期する必要があることに注意してください。
+
+ソースコードを変更したいユーザはGenesisを開発者モードでインストールすることを推奨します。まず、pip経由の `genesis-world` がアンインストールされていることを確認してください。そして、このレポジトリーを以下のようにクローンしてインストールしてください。
 
 ```bash
 git clone https://github.com/Genesis-Embodied-AI/Genesis.git
 cd Genesis
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ## Docker
@@ -114,7 +122,7 @@ Genesisプロジェクトはオープンで協力的な取り組みです。以�
 - GitHub Issuesを通じた**バグ報告**。
 - Genesisの使いやすさを向上させるための**提案**。
 
-詳細は[貢献ガイド](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/CONTRIBUTING.md)をご参照ください。
+詳細は[貢献ガイド](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/.github/CONTRIBUTING.md)をご参照ください。
 
 ## サポート
 
@@ -167,9 +175,9 @@ Genesisプロジェクトに関与した主要な研究論文の一覧：
 研究でGenesisを使用する場合、以下を引用してください：
 
 ```bibtex
-@software{Genesis,
+@misc{Genesis,
   author = {Genesis Authors},
-  title = {Genesis: A Universal and Generative Physics Engine for Robotics and Beyond},
+  title = {Genesis: A Generative and Universal Physics Engine for Robotics and Beyond},
   month = {December},
   year = {2024},
   url = {https://github.com/Genesis-Embodied-AI/Genesis}

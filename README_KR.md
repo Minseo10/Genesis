@@ -20,7 +20,7 @@
 ## 🔥 새 소식
 
 - [2024-12-25] 레이 트레이싱 렌더러를 지원하는 [docker](#docker) 추가
-- [2024-12-24] [제네시스 기여](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/CONTRIBUTING.md) 가이드라인 추가
+- [2024-12-24] [제네시스 기여](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/.github/CONTRIBUTING.md) 가이드라인 추가
 
 ## Table of Contents
 
@@ -69,7 +69,7 @@ Genesis의 목표:
 Genesis는 PyPI를 통해 설치할 수 있습니다:
 
 ```bash
-pip install genesis-world  # Python >=3.9 필요
+pip install genesis-world  # Python>=3.10,<3.13 필요
 ```
 
 또한, [공식 설명서](https://pytorch.org/get-started/locally/)에 따라 **PyTorch**를 설치해야 합니다.
@@ -79,7 +79,7 @@ pip install genesis-world  # Python >=3.9 필요
 ```bash
 git clone https://github.com/Genesis-Embodied-AI/Genesis.git
 cd Genesis
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ## Docker
@@ -114,7 +114,7 @@ Genesis 프로젝트는 오픈 소스 및 협력 프로젝트입니다. 다음�
 - GitHub Issues를 통한 **버그 리포트**.
 - Genesis의 사용성을 향상시키기 위한 **제안**.
 
-자세한 내용은 [기여 가이드](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/CONTRIBUTING.md)를 참조하세요.
+자세한 내용은 [기여 가이드](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/.github/CONTRIBUTING.md)를 참조하세요.
 
 ## 지원
 
@@ -168,10 +168,11 @@ Genesis는 다양한 기존 및 진행 중인 연구의 최첨단 기술을 하�
 연구에서 Genesis를 사용하는 경우, 다음을 인용해 주세요:
 
 ```bibtex
-@software{Genesis,
+@misc{Genesis,
   author = {Genesis Authors},
-  title = {Genesis: A Universal and Generative Physics Engine for Robotics and Beyond},
+  title = {Genesis: A Generative and Universal Physics Engine for Robotics and Beyond},
   month = {December},
   year = {2024},
   url = {https://github.com/Genesis-Embodied-AI/Genesis}
 }
+```

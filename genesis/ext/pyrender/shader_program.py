@@ -1,5 +1,4 @@
-"""OpenGL shader program wrapper.
-"""
+"""OpenGL shader program wrapper."""
 
 import numpy as np
 import os
@@ -67,8 +66,11 @@ class ShaderProgramCache(object):
 
     def clear(self):
         for key in self._program_cache:
-            self._program_cache[key].delete()
-        self._program_cache = {}
+            try:
+                self._program_cache[key].delete()
+            except OpenGL.error.GLError:
+                pass
+        self._program_cache.clear()
 
 
 class ShaderProgram(object):

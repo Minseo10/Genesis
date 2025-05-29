@@ -1,16 +1,20 @@
-import contextlib
 import os
 import pickle as pkl
-from io import StringIO
+from contextlib import redirect_stdout
 
 import numpy as np
+import numpy.typing as npt
 import pyvista as pv
 import tetgen
+import trimesh
+import pymeshlab
 
 import genesis as gs
+from genesis.options.surfaces import Surface
 import genesis.utils.mesh as mu
+import genesis.utils.gltf as gltf_utils
 import genesis.utils.particle as pu
-from genesis.ext import trimesh
+from genesis.ext import fast_simplification
 from genesis.repr_base import RBC
 
 
@@ -32,6 +36,10 @@ class Mesh(RBC):
         Whether to decimate the mesh.
     decimate_face_num : int
         The target number of faces after decimation.
+    decimate_aggressiveness : int
+        How hard the decimation process will try to match the target number of faces, as a integer ranging from 0 to 8.
+        0 is losseless. 2 preserves all features of the original geometry. 5 may significantly alters
+        the original geometry if necessary. 8 does what needs to be done at all costs. Default to 0.
     metadata : dict
         The metadata of the mesh.
     """
@@ -39,18 +47,19 @@ class Mesh(RBC):
     def __init__(
         self,
         mesh,
-        surface=None,
-        uvs=None,
+        surface: Surface | None = None,
+        uvs: npt.NDArray | None = None,
         convexify=False,
         decimate=False,
         decimate_face_num=500,
-        metadata=dict(),
+        decimate_aggressiveness=0,
+        metadata=None,
     ):
         self._uid = gs.UID()
         self._mesh = mesh
         self._surface = surface
         self._uvs = uvs
-        self._metadata = metadata
+        self._metadata = metadata or {}
 
         if self._surface.requires_uv():  # check uvs here
             if self._uvs is None:
@@ -67,7 +76,7 @@ class Mesh(RBC):
             self.convexify()
 
         if decimate:
-            self.decimate(decimate_face_num, convexify)
+            self.decimate(decimate_face_num, decimate_aggressiveness, convexify)
 
     def convexify(self):
         """
@@ -77,12 +86,21 @@ class Mesh(RBC):
             self._mesh = trimesh.convex.convex_hull(self._mesh)
         self.clear_visuals()
 
-    def decimate(self, target_face_num, convexify):
+    def decimate(self, decimate_face_num, decimate_aggressiveness, convexify):
         """
         Decimate the mesh.
         """
-        if self._mesh.vertices.shape[0] > 3 and self._mesh.faces.shape[0] > target_face_num:
-            self._mesh = self._mesh.simplify_quadric_decimation(target_face_num)
+        if self._mesh.vertices.shape[0] > 3 and self._mesh.faces.shape[0] > decimate_face_num:
+            self._mesh.process(validate=True)
+            self._mesh = trimesh.Trimesh(
+                *fast_simplification.simplify(
+                    self._mesh.vertices,
+                    self._mesh.faces,
+                    target_count=decimate_face_num,
+                    agg=decimate_aggressiveness,
+                    lossless=(decimate_aggressiveness == 0),
+                )
+            )
 
             # need to run convexify again after decimation, because sometimes decimating a convex-mesh can make it non-convex...
             if convexify:
@@ -96,10 +114,18 @@ class Mesh(RBC):
         """
         rm_file_path = mu.get_remesh_path(self.verts, self.faces, edge_len_abs, edge_len_ratio, fix)
 
-        if not os.path.exists(rm_file_path):
+        is_cached_loaded = False
+        if os.path.exists(rm_file_path):
+            gs.logger.debug("Remeshed file (`.rm`) found in cache.")
+            try:
+                with open(rm_file_path, "rb") as file:
+                    verts, faces = pkl.load(file)
+                is_cached_loaded = True
+            except (EOFError, ModuleNotFoundError, pkl.UnpicklingError):
+                gs.logger.info("Ignoring corrupted cache.")
+
+        if not is_cached_loaded:
             gs.logger.info("Remeshing for tetrahedralization...")
-            with contextlib.redirect_stdout(StringIO()):
-                import pymeshlab
             ms = pymeshlab.MeshSet()
             ms.add_mesh(pymeshlab.Mesh(vertex_matrix=self.verts, face_matrix=self.faces))
             if edge_len_abs is not None:
@@ -112,10 +138,8 @@ class Mesh(RBC):
             # if fix:
             #     verts, faces = pymeshfix.clean_from_arrays(verts, faces)
             os.makedirs(os.path.dirname(rm_file_path), exist_ok=True)
-            pkl.dump([verts, faces], open(rm_file_path, "wb"))
-        else:
-            gs.logger.debug("Remeshed file (`.rm`) found in cache.")
-            verts, faces = pkl.load(open(rm_file_path, "rb"))
+            with open(rm_file_path, "wb") as file:
+                pkl.dump((verts, faces), file)
 
         self._mesh = trimesh.Trimesh(
             vertices=verts,
@@ -123,7 +147,7 @@ class Mesh(RBC):
         )
         self.clear_visuals()
 
-    def tetrahedralize(self, order, mindihedral, minratio, nobisect, quality, verbose):
+    def tetrahedralize(self, tet_cfg):
         """
         Tetrahedralize the mesh.
         """
@@ -131,9 +155,8 @@ class Mesh(RBC):
             self.verts, np.concatenate([np.full((self.faces.shape[0], 1), self.faces.shape[1]), self.faces], axis=1)
         )
         tet = tetgen.TetGen(pv_obj)
-        verts, elems = tet.tetrahedralize(
-            order=order, mindihedral=mindihedral, minratio=minratio, nobisect=nobisect, quality=quality, verbose=verbose
-        )
+        switches = mu.make_tetgen_switches(tet_cfg)
+        verts, elems = tet.tetrahedralize(switches=switches)
         # visualize_tet(tet, pv_obj, show_surface=False, plot_cell_qual=False)
         return verts, elems
 
@@ -146,12 +169,12 @@ class Mesh(RBC):
         Sample particles using the mesh volume.
         """
         if "pbs" in sampler:
-            positions = pu.trimesh_to_particles_pbs(self._mesh, p_size, sampler)
-            if positions is None:
-                gs.logger.warning("`pbs` sampler failed. Falling back to `random` sampler.")
+            try:
+                positions = pu.trimesh_to_particles_pbs(self._mesh, p_size, sampler)
+            except gs.GenesisException:
                 sampler = "random"
 
-        if sampler in ["random", "regular"]:
+        if sampler in ("random", "regular"):
             positions = pu.trimesh_to_particles_simple(self._mesh, p_size, sampler)
 
         return positions
@@ -182,7 +205,7 @@ class Mesh(RBC):
         Copy the mesh.
         """
         return Mesh(
-            mesh=self._mesh.copy(),
+            mesh=self._mesh.copy(include_cache=True),
             surface=self._surface.copy(),
             uvs=self._uvs.copy() if self._uvs is not None else None,
             metadata=self._metadata.copy(),
@@ -190,7 +213,15 @@ class Mesh(RBC):
 
     @classmethod
     def from_trimesh(
-        cls, mesh, scale=None, convexify=False, decimate=False, decimate_face_num=500, metadata=dict(), surface=None
+        cls,
+        mesh,
+        scale=None,
+        convexify=False,
+        decimate=False,
+        decimate_face_num=500,
+        decimate_aggressiveness=2,
+        metadata=None,
+        surface=None,
     ):
         """
         Create a genesis.Mesh from a trimesh.Trimesh object.
@@ -199,7 +230,7 @@ class Mesh(RBC):
             surface = gs.surfaces.Default()
         else:
             surface = surface.copy()
-        mesh = mesh.copy()
+        mesh = mesh.copy(include_cache=True)
 
         try:  # always parse uvs because roughness and normal map also need uvs
             uvs = mesh.visual.uv.copy()
@@ -224,7 +255,7 @@ class Mesh(RBC):
                     if material.baseColorTexture is not None:
                         color_image = mu.PIL_to_array(material.baseColorTexture)
                     if material.baseColorFactor is not None:
-                        color_factor = tuple(np.array(material.baseColorFactor, dtype=float) / 255.0)
+                        color_factor = tuple(np.array(material.baseColorFactor, dtype=np.float32) / 255.0)
 
                     if material.roughnessFactor is not None:
                         roughness_factor = (material.roughnessFactor,)
@@ -233,7 +264,7 @@ class Mesh(RBC):
                     if material.image is not None:
                         color_image = mu.PIL_to_array(material.image)
                     elif material.diffuse is not None:
-                        color_factor = tuple(np.array(material.diffuse, dtype=float) / 255.0)
+                        color_factor = tuple(np.array(material.diffuse, dtype=np.float32) / 255.0)
 
                     if material.glossiness is not None:
                         roughness_factor = ((2 / (material.glossiness + 2)) ** (1.0 / 4.0),)
@@ -249,13 +280,14 @@ class Mesh(RBC):
 
             else:
                 # TODO: support vertex/face colors in luisa
-                color_factor = tuple(np.array(mesh.visual.main_color, dtype=float) / 255.0)
+                color_factor = tuple(np.array(mesh.visual.main_color, dtype=np.float32) / 255.0)
 
         else:
             # use white color as default
             color_factor = (1.0, 1.0, 1.0, 1.0)
 
         color_texture = mu.create_texture(color_image, color_factor, "srgb")
+        opacity_texture = None
         if color_texture is not None:
             opacity_texture = color_texture.check_dim(3)
         roughness_texture = mu.create_texture(None, roughness_factor, "linear")
@@ -277,6 +309,7 @@ class Mesh(RBC):
             convexify=convexify,
             decimate=decimate,
             decimate_face_num=decimate_face_num,
+            decimate_aggressiveness=decimate_aggressiveness,
             metadata=metadata,
         )
 
@@ -287,8 +320,6 @@ class Mesh(RBC):
         """
         if surface is None:
             surface = gs.surfaces.Default()
-        else:
-            surface = surface.copy()
 
         return cls(
             mesh=trimesh.Trimesh(
@@ -316,12 +347,11 @@ class Mesh(RBC):
                 if morph.parse_glb_with_trimesh:
                     meshes = mu.parse_mesh_trimesh(morph.file, morph.group_by_material, morph.scale, surface)
                 else:
-                    meshes = mu.parse_mesh_glb(morph.file, morph.group_by_material, morph.scale, surface)
+                    meshes = gltf_utils.parse_mesh_glb(morph.file, morph.group_by_material, morph.scale, surface)
 
-            elif hasattr(morph, "files") and len(morph.files) > 0:  # for meshset
-                meshes = morph.files
-                assert all([isinstance(v, trimesh.Trimesh) for v in meshes])
-                meshes = [mu.trimesh_to_mesh(v, morph.scale, surface) for v in meshes]
+            elif isinstance(morph, gs.options.morphs.MeshSet):
+                assert all(isinstance(mesh, trimesh.Trimesh) for mesh in morph.files)
+                meshes = [mu.trimesh_to_mesh(mesh, morph.scale, surface) for mesh in morph.files]
 
             else:
                 gs.raise_exception(
@@ -343,7 +373,8 @@ class Mesh(RBC):
             else:
                 gs.raise_exception()
 
-            return cls.from_trimesh(tmesh, surface=surface)
+            metadata = {"mesh_path": morph.file} if isinstance(morph, gs.options.morphs.FileMorph) else {}
+            return cls.from_trimesh(tmesh, surface=surface, metadata=metadata)
 
     def set_color(self, color):
         """
